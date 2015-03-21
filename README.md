@@ -1,6 +1,6 @@
 
     pip install ansible
-    ansible-playbook -i ansible/ansible_hosts ansible/django.yml --extra-vars='git_repo=git@github.com:username/django-project.git'
+    ansible-playbook ansible/django.yml --extra-vars='git_repo=git@github.com:username/django-project.git'
 
 Expects that the django project repository:
 
