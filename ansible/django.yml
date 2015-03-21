@@ -1,4 +1,4 @@
-- name: Apply pci role
+- name: Apply django role
   hosts: localhost
   sudo: yes
   roles:
