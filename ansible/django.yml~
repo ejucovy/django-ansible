@@ -1,0 +1,5 @@
+- name: Apply pci role
+  hosts: localhost
+  sudo: yes
+  roles:
+    - role: pci

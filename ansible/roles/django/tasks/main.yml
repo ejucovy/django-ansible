@@ -1,0 +1,161 @@
+- name: Update package list
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade system packages
+  apt:
+    upgrade: dist
+
+- name: Install system tools and dependancies
+  apt:
+    pkg: "{{ item }}"
+    state: present
+  with_items:
+  - git
+  - ntp
+  - dnsutils
+  - python-apt
+  - python-pip
+  - python-dev
+  - python-virtualenv
+  - python-opencv 
+  - python-numpy
+  - build-essential
+  - libpq-dev
+  - python-psycopg2
+  - postgresql
+  - apache2
+  - apache2-utils
+  - libapache2-mod-proxy-uwsgi
+  - uwsgi
+  - uwsgi-plugin-python
+  - libpng12-dev
+  - zlib1g-dev
+  - libjpeg-dev
+
+- name: Install useful tools
+  apt:
+    pkg: "{{ item }}"
+    state: present
+  with_items:
+  - vim
+  - htop
+  - iotop
+  - iftop
+  - screen
+  - bash-completion
+  - ipython
+  - multitail
+  - emacs
+
+- name: Add django user
+  user:
+    name: django
+
+- name: Make dirs
+  sudo: true
+  file:
+    state: directory
+    path: "{{ item }}"
+    owner: django
+    recurse: yes
+  with_items:
+    - /var/www/html
+
+- name: Clone django app repo
+  sudo: true
+  sudo_user: django
+  git:
+    repo: "{{ git_repo }}"
+    dest: /home/django/app
+    accept_hostkey: true
+
+- name: Install pip requirements
+  pip:
+    requirements: /home/django/app/requirements.txt
+
+- name: Start postgres
+  service:
+    name: postgresql
+    state: started
+    enabled: true
+
+- name: Check if db already exists
+  sudo: true
+  sudo_user: postgres
+  shell: "psql -l | grep django"
+  ignore_errors: true
+  args:
+    chdir: /home/django/app/
+  register: db_exists
+
+- name: Create db
+  sudo: true
+  sudo_user: postgres
+  postgresql_db: name=django
+  when: db_exists.rc != 0
+
+- name: Copy pg_hba patch
+  sudo: true
+  sudo_user: django
+  copy:
+    src=pg_hba.conf.patch
+    dest=/tmp/pg_hba.conf.patch
+
+- name: Patch postgres config to trust local connections as postgres user
+  sudo: true
+  command: 'patch -N /etc/postgresql/9.3/main/pg_hba.conf /tmp/pg_hba.conf.patch'
+  ignore_errors: yes
+
+- name: Restart postgresql
+  service:
+    name: postgresql
+    state: restarted
+    enabled: true
+
+- name: Collect static files
+  sudo: true
+  sudo_user: django
+  django_manage:
+    command=collectstatic
+    app_path=/home/django/app
+  notify: restart uwsgi
+
+- name: Copy uwsgi conf file
+  copy:
+    src: "uwsgi.ini"
+    dest: "/etc/uwsgi/apps-available/django.ini"
+  notify: restart uwsgi
+
+- name: Activate uwsgi conf file
+  file:
+    state: link
+    path: "/etc/uwsgi/apps-enabled/django.ini"
+    src: "/etc/uwsgi/apps-available/django.ini"
+  notify: restart uwsgi
+
+- name: Remove default apache2 vhost conf file
+  file:
+    path: /etc/apache2/sites-enabled/000-default.conf
+    state: absent
+  notify: restart apache2
+
+- name: Copy apache2 vhost conf file
+  template:
+    src: "apache.conf.j2"
+    dest: "/etc/apache2/sites-available/django.conf"
+  notify: restart apache2
+
+- name: Activate apache2 conf file
+  file:
+    state: link
+    path: "/etc/apache2/sites-enabled/000-django.conf"
+    src: "/etc/apache2/sites-available/django.conf"
+  notify: restart apache2
+
+- name: Enable proxy module
+  apache2_module:
+    name: proxy
+    state: present
+  notify: restart apache2

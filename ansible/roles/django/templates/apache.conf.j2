@@ -1,0 +1,27 @@
+<VirtualHost *:80>
+#    ServerName {{ fqdn }}
+#    ServerAdmin webmaster@{{ fqdn }}
+    DocumentRoot /var/www/html
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+    Alias /static/ /home/django/app/static/
+    Alias /media/ /home/django/app/media/
+    <Directory /home/django/app/static>
+      Require all granted
+      Order allow,deny
+      Allow from all
+    </Directory>
+    <Directory /home/django/app/media>
+      Require all granted
+      Order allow,deny
+      Allow from all
+    </Directory>
+
+    ProxyPass /static/ !
+    ProxyPass /media/ !
+    
+    ProxyPass   /           uwsgi://localhost:8080/
+
+</VirtualHost>
